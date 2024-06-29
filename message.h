@@ -1,5 +1,3 @@
-#include "time.h"
-
 /* some struct that we're sending from one process to another */
 struct Message {
     uint64_t timestamp;

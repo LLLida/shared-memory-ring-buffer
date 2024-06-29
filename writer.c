@@ -35,6 +35,8 @@ int main(int argc, char** argv)
   }
   printf("Ring buffer: fd=%d size=%lu refcount=%lu id=%s\n", buffer.impl->fd, buffer.impl->size, buffer.impl->refcount, buffer.impl->identifier);
 
+  sleep(5);
+
   send_message(&buffer);
   send_message(&buffer);
   send_message(&buffer);

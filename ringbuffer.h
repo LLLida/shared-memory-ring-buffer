@@ -11,6 +11,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
+#include "time.h"
 #include "unistd.h"
 
 /* per-process object */
@@ -34,7 +35,13 @@ struct Ring_Buffer_Details {
   size_t tail;
   int fd;
   char identifier[64];
+  pthread_mutexattr_t mutex_attr;
   pthread_mutex_t mutex;
+  pthread_condattr_t cond_attr;
+  pthread_cond_t cond;
+  size_t readers;
+  size_t writers;
+  size_t active_writers;
   _Atomic size_t refcount;
 };
 
@@ -103,11 +110,23 @@ int create_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, 
   rb->refcount = 1;
   strncpy(rb->identifier, identifier, sizeof(rb->identifier));
   rb->fd = fd;
-  if (pthread_mutex_init(&rb->mutex, NULL) != 0) {
+  pthread_mutexattr_init(&rb->mutex_attr);
+  pthread_mutexattr_setpshared(&rb->mutex_attr, PTHREAD_PROCESS_SHARED);
+  if (pthread_mutex_init(&rb->mutex, &rb->mutex_attr) != 0) {
     fprintf(stderr, "create_ring_buffer: pthread mutex init failed\n");
     detach_ring_buffer(rb);
     return -1;
   }
+  pthread_condattr_init(&rb->cond_attr);
+  pthread_condattr_setpshared(&rb->cond_attr, PTHREAD_PROCESS_SHARED);
+  if (pthread_cond_init(&rb->cond, &rb->cond_attr) != 0) {
+    fprintf(stderr, "create_ring_buffer: pthread cond init failed\n");
+    detach_ring_buffer(rb);
+    return -1;
+  }
+  rb->readers = 0;
+  rb->writers = 0;
+  rb->active_writers = 0;
 
   *ring_buffer = (struct Ring_Buffer) {
     .buffer = buffer,
@@ -153,6 +172,7 @@ int get_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, siz
   return 0;
 }
 
+/* NOTE: there's should be only 1 writer at a time */
 int write_to_ring_buffer(struct Ring_Buffer* ring_buffer, const void* data, size_t size)
 {
   uint8_t* buffer = ring_buffer->buffer;
@@ -172,11 +192,12 @@ int write_to_ring_buffer(struct Ring_Buffer* ring_buffer, const void* data, size
   memcpy(&buffer[rb->tail], data, size);
   rb->tail += size;
 
+  pthread_cond_signal(&rb->cond);
   pthread_mutex_unlock(&rb->mutex);
-  printf("%lu %lu\n", rb->head, rb->tail);
   return 0;
 }
 
+/* NOTE: there's should be only 1 reader at a time */
 void* read_from_ring_buffer(struct Ring_Buffer* ring_buffer, size_t* size)
 {
   uint8_t* buffer = ring_buffer->buffer;
@@ -184,8 +205,10 @@ void* read_from_ring_buffer(struct Ring_Buffer* ring_buffer, size_t* size)
 
   void* data = NULL;
   pthread_mutex_lock(&rb->mutex);
+  while(rb->head == rb->tail) {
+    pthread_cond_wait(&rb->cond, &rb->mutex);
+  }
 
-  printf("%lu %lu\n", rb->head, rb->tail);
   *size = rb->tail - rb->head;
   data = &buffer[rb->head];
   rb->head = rb->tail;
