@@ -3,12 +3,18 @@
 #include "pthread.h"
 #include "sys/ipc.h"
 #include "sys/shm.h"
+#include "stddef.h"
 #include "stdint.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 #include "unistd.h"
 
+#include "ringbuffer.h"
+
+#ifndef RING_BUFFER_SIZE
+#define RING_BUFFER_SIZE 1024
+#endif
 #define SHM_KEY 42069
 #define CPU_ID 1
 
@@ -22,23 +28,11 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  int shmid = shmget(SHM_KEY, 1024, IPC_CREAT|0666);
-  if (shmid == -1) {
-    fprintf(stderr, "shmget failed\n");
-    return -1;
-  }
+  struct Ring_Buffer* rb = get_ring_buffer(SHM_KEY, RING_BUFFER_SIZE);
 
-  uint8_t* shared_memory = shmat(shmid, NULL, 0);
-  if (shared_memory == NULL) {
-    fprintf(stderr, "shmat failed\n");
-    return -1;
-  }
+  printf("Ring buffer: shmid=%d size=%lu refcount=%lu\n", rb->shmid, rb->size, rb->refcount);
 
-  char buff[1024];
-  strcpy(buff, (char*)shared_memory);
-  printf("  %s\n", buff);
-
-  shmdt(shared_memory);
+  detach_ring_buffer(rb);
 
   return 0;
 }

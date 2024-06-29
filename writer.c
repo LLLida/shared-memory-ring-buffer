@@ -9,6 +9,9 @@
 #include "string.h"
 #include "unistd.h"
 
+#include "ringbuffer.h"
+
+#define RING_BUFFER_SIZE 1024
 #define SHM_KEY 42069
 #define CPU_ID 0
 
@@ -22,24 +25,11 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  int shmid = shmget(SHM_KEY, 1024, IPC_CREAT|0666);
-  if (shmid == -1) {
-    fprintf(stderr, "shmget failed\n");
-    return -1;
-  }
-
-  uint8_t* shared_memory = shmat(shmid, NULL, 0);
-  if (shared_memory == NULL) {
-    fprintf(stderr, "shmat failed\n");
-    return -1;
-  }
-
-  strcpy((char*)shared_memory, "Hello from writer process!");
+  struct Ring_Buffer* rb = create_ring_buffer(SHM_KEY, RING_BUFFER_SIZE);
 
   sleep(10);
 
-  shmdt(shared_memory);
-  shmctl(shmid, IPC_RMID, NULL);
+  detach_ring_buffer(rb);
 
   return 0;
 }
