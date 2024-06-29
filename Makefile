@@ -1,5 +1,5 @@
 CC ?=
-CFLAGS ?= -Wall -Wpedantic -Wextra -std=c11 -g
+CFLAGS ?= -Wall -Wpedantic -Wextra -std=c11 -O2
 
 .PHONY: all
 
@@ -10,3 +10,6 @@ writer: writer.c ringbuffer.h message.h
 
 reader: reader.c ringbuffer.h message.h
 	$(CC) $(CFLAGS) reader.c -o $@
+
+benchmark: writer reader
+	python py/benchmark.py

@@ -26,7 +26,7 @@ def run_benchmark(ring_buffer_size: int, frequency: int, outpath):
     return plot_results(outpath, imagepath, f'{ring_buffer_size=} {frequency=}')
 
 # buff_sizes = [4096, 4*4096, 1024*1024, 32*1024*1024]
-buff_sizes = [1024*1024, 32*1024*1024]
+buff_sizes = [4096, 4*4096, 8*4096]
 freqs = [10, 50, 100, 200, 500, 750, 1000]
 
 stats = []
