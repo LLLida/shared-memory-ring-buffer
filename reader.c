@@ -2,11 +2,16 @@
 #include "ringbuffer.h"
 #include "message.h"
 
+#include "signal.h"
+
 #define SHM_KEY "/adil-shmem"
 #define CPU_ID 1
 
 /* reads messages from ring buffer */
 static void read_messages(struct Ring_Buffer* buffer);
+
+static volatile int keep_running = 1;
+static void interruption_handler(int dummy);
 
 int main(int argc, char** argv)
 {
@@ -17,6 +22,8 @@ int main(int argc, char** argv)
     return 1;
   }
   rb_size = atoll(argv[1]);
+
+  signal(SIGINT, &interruption_handler);
 
   cpu_set_t cpuset;
   CPU_ZERO(&cpuset);
@@ -34,7 +41,9 @@ int main(int argc, char** argv)
 
   printf("Ring buffer: fd=%d size=%lu refcount=%lu id=%s\n", buffer.impl->fd, buffer.impl->size, buffer.impl->refcount, buffer.impl->identifier);
 
-  read_messages(&buffer);
+  while (keep_running) {
+    read_messages(&buffer);
+  }
 
   detach_ring_buffer(buffer.impl);
   return 0;
@@ -52,4 +61,11 @@ void read_messages(struct Ring_Buffer* buffer)
     msg = (struct Message*)((uint8_t*)msg + bytes);
     sz -= bytes;
   }
+}
+
+void interruption_handler(int dummy)
+{
+  (void)dummy;
+  printf("\ninterrupt\n");
+  keep_running = 0;
 }

@@ -50,6 +50,9 @@ void detach_ring_buffer(struct Ring_Buffer_Details* rb)
   size_t val = --rb->refcount;
 
   if (val == 0) {
+    pthread_cond_destroy(&rb->cond);
+    pthread_mutex_destroy(&rb->mutex);
+
     const int pagesize = getpagesize();
     const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
 
