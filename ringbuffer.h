@@ -39,9 +39,6 @@ struct Ring_Buffer_Details {
   pthread_mutex_t mutex;
   pthread_condattr_t cond_attr;
   pthread_cond_t cond;
-  size_t readers;
-  size_t writers;
-  size_t active_writers;
   _Atomic size_t refcount;
 };
 
@@ -52,11 +49,14 @@ void detach_ring_buffer(struct Ring_Buffer_Details* rb)
   if (val == 0) {
     pthread_cond_destroy(&rb->cond);
     pthread_mutex_destroy(&rb->mutex);
+    char buff[64];
+    strcpy(buff, rb->identifier);
 
     const int pagesize = getpagesize();
     const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
 
     munmap(rb, rb_size+rb->size);
+    shm_unlink(buff);
     printf("destroyed ring buffer\n");
   }
 }
@@ -111,7 +111,7 @@ int create_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, 
   rb->head = 0;
   rb->tail = 0;
   rb->refcount = 1;
-  strncpy(rb->identifier, identifier, sizeof(rb->identifier));
+  strncpy(rb->identifier, identifier, sizeof(rb->identifier)-1);
   rb->fd = fd;
   pthread_mutexattr_init(&rb->mutex_attr);
   pthread_mutexattr_setpshared(&rb->mutex_attr, PTHREAD_PROCESS_SHARED);
@@ -127,9 +127,6 @@ int create_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, 
     detach_ring_buffer(rb);
     return -1;
   }
-  rb->readers = 0;
-  rb->writers = 0;
-  rb->active_writers = 0;
 
   *ring_buffer = (struct Ring_Buffer) {
     .buffer = buffer,

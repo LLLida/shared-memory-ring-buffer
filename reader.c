@@ -67,7 +67,7 @@ int main(int argc, char** argv)
   struct tm tm = *localtime(&t);
   snprintf(filepath, sizeof(filepath), "results_%d_%02d_%02d_%02d%02d%02d.csv", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
   } else {
-    strncpy(filepath, specified_path, sizeof(filepath));
+    strncpy(filepath, specified_path, sizeof(filepath)-1);
   }
 
   FILE* results = fopen(filepath, "w");

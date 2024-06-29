@@ -19,9 +19,21 @@ def run_benchmark(ring_buffer_size: int, frequency: int, outpath):
     # processes
     os.kill(reader_process.pid, signal.SIGINT)
     os.kill(writer_process.pid, signal.SIGINT)
+    reader_process.wait()
 
     # plot the resulting image
-    imagepath = f'img/graph_{ring_buffer_size}_{frequency}.png'
-    plot_results(outpath, imagepath, f'{ring_buffer_size=} {frequency=}')
+    imagepath = f'img/graph_{ring_buffer_size//1024}K_{frequency}.png'
+    return plot_results(outpath, imagepath, f'{ring_buffer_size=} {frequency=}')
 
-run_benchmark(4096, 10, 'temp.csv')
+# buff_sizes = [4096, 4*4096, 1024*1024, 32*1024*1024]
+buff_sizes = [1024*1024, 32*1024*1024]
+freqs = [10, 50, 100, 200, 500, 750, 1000]
+
+stats = []
+for buff_size in buff_sizes:
+    for freq in freqs:
+        mu, _ = run_benchmark(buff_size, freq, 'temp.csv')
+        print(f'\t{mu=}')
+        stats.append((buff_size, freq, mu))
+
+print(stats)

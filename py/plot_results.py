@@ -21,8 +21,9 @@ def plot_results(filepath, imagepath, title='Performance'):
     send = send[ind:]
     retrieve = retrieve[ind:]
 
-    mu = np.mean(retrieve-send)
-    std = np.std(retrieve-send)
+    diff = np.clip(retrieve-send, 0, 1)
+    mu = np.mean(diff)
+    std = np.std(diff)
 
     ax.set_title(title+f'\nduration={mu*1000000:.2f}+-{std*1000000:.2f} microsec')
     ax.plot(send, retrieve-send)
@@ -33,6 +34,7 @@ def plot_results(filepath, imagepath, title='Performance'):
 
     plt.savefig(imagepath)
     print(f'saved plot to {imagepath}...')
+    plt.close()
 
     return mu, std
 
