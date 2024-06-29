@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_results(filepath, imagepath):
+def plot_results(filepath, imagepath, title='Performance'):
     df = pd.read_csv(filepath)
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -16,6 +16,15 @@ def plot_results(filepath, imagepath):
     send = send_sec + df['send_nsec']/(10**9)
     retrieve = retrieve_sec + df['retrieve_nsec']/(10**9)
 
+    # skip first 5 seconds because measurements at start are unstable
+    ind = np.searchsorted(send, 5.0)
+    send = send[ind:]
+    retrieve = retrieve[ind:]
+
+    mu = np.mean(retrieve-send)
+    std = np.std(retrieve-send)
+
+    ax.set_title(title+f'\nduration={mu*1000000:.2f}+-{std*1000000:.2f} microsec')
     ax.plot(send, retrieve-send)
     ax.grid()
     ax.set_xlabel('time, sec')
@@ -24,6 +33,8 @@ def plot_results(filepath, imagepath):
 
     plt.savefig(imagepath)
     print(f'saved plot to {imagepath}...')
+
+    return mu, std
 
 if __name__ == '__main__':
     import argparse

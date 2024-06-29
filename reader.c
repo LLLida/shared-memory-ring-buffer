@@ -24,12 +24,17 @@ static void interruption_handler(int dummy);
 int main(int argc, char** argv)
 {
   int64_t rb_size;
-  if (argc != 2) {
-    printf("Usage: %s SIZE\n", argv[0]);
+  const char* specified_path = NULL;
+  if (argc != 2 && argc != 3) {
+    printf("Usage: %s SIZE [PATH]\n", argv[0]);
     printf("  where SIZE is size of ring buffer in bytes.\n");
+    printf("  where PATH is filepath where measurements will be saved(optional).\n");
     return 1;
   }
   rb_size = atoll(argv[1]);
+  if (argc == 3) {
+    specified_path = argv[2];
+  }
 
   signal(SIGINT, &interruption_handler);
 
@@ -56,10 +61,14 @@ int main(int argc, char** argv)
   }
 
   /* save measures to .csv file  */
+  char filepath[256];
+  if (specified_path == NULL) {
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
-  char filepath[256];
   snprintf(filepath, sizeof(filepath), "results_%d_%02d_%02d_%02d%02d%02d.csv", tm.tm_year+1900, tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+  } else {
+    strncpy(filepath, specified_path, sizeof(filepath));
+  }
 
   FILE* results = fopen(filepath, "w");
   fprintf(results, "send_sec,send_nsec,retrieve_sec,retrieve_nsec,\n");
