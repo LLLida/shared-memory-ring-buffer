@@ -1,8 +1,12 @@
 /* Source code for the process that reads data. */
 #include "ringbuffer.h"
+#include "message.h"
 
 #define SHM_KEY "/adil-shmem"
 #define CPU_ID 1
+
+/* reads messages from ring buffer */
+static void read_messages(struct Ring_Buffer* buffer);
 
 int main(int argc, char** argv)
 {
@@ -30,11 +34,22 @@ int main(int argc, char** argv)
 
   printf("Ring buffer: fd=%d size=%lu refcount=%lu id=%s\n", buffer.impl->fd, buffer.impl->size, buffer.impl->refcount, buffer.impl->identifier);
 
-  size_t msg_len;
-  char* message = read_from_ring_buffer(&buffer, &msg_len);
-  printf("len=%lu msg=%p %ld\n", msg_len, message, message-(char*)buffer.impl);
-  printf("Message(len=%lu): \"%s\"\n", msg_len, message);
+  read_messages(&buffer);
 
   detach_ring_buffer(buffer.impl);
   return 0;
+}
+
+void read_messages(struct Ring_Buffer* buffer)
+{
+  size_t sz;
+  struct Message* msg = read_from_ring_buffer(buffer, &sz);
+
+  while (sz > 0) {
+    printf("Message %lu: time=%lu \"%.*s\"\n", msg->id, msg->timestamp, msg->msg_len, msg->buf);
+
+    size_t bytes = sizeof(msg->timestamp)+sizeof(msg->id)+sizeof(msg->msg_len)+msg->msg_len;
+    msg = (struct Message*)((uint8_t*)msg + bytes);
+    sz -= bytes;
+  }
 }
