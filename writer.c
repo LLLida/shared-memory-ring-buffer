@@ -64,7 +64,6 @@ void send_message(struct Ring_Buffer* buffer)
 
   static struct Message msg;
 
-  static struct timespec tp;
   static uint64_t counter = 0;
 
   msg.msg_len = rand() % 10 + 5;
@@ -72,12 +71,14 @@ void send_message(struct Ring_Buffer* buffer)
     msg.buf[i] = some_string[i%some_len];
   }
 
+  struct timespec tp;
   clock_gettime(CLOCK_REALTIME, &tp);
-  msg.timestamp = tp.tv_nsec;
+  msg.sec = tp.tv_sec;
+  msg.ns = tp.tv_nsec;
   msg.id = counter++;
 
   write_to_ring_buffer(buffer, &msg,
-		       sizeof(msg.timestamp)+sizeof(msg.id)+sizeof(msg.msg_len)+msg.msg_len);
+		       sizeof(msg.sec)+sizeof(msg.ns)+sizeof(msg.id)+sizeof(msg.msg_len)+msg.msg_len);
 }
 
 static void interruption_handler(int dummy)
