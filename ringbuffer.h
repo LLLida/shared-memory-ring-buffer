@@ -13,10 +13,21 @@
 #include "string.h"
 #include "unistd.h"
 
-/* https://lo.calho.st/posts/black-magic-buffer/ */
+/* per-process object */
 struct Ring_Buffer {
-  /* pointer to begining of ring buffer (shared memory) */
-  uint8_t* shmem;
+  /* pointer to begining of ring buffer (shared memory)
+     NOTE: this pointer is unique for each process, because processes
+     have different virtual adress spaces
+   */
+  uint8_t* buffer;
+  /* actual ring buffer object placed in shared memory */
+  struct Ring_Buffer_Details* impl;
+};
+
+/* ring buffer object placed in shared memory
+   Based on https://lo.calho.st/posts/black-magic-buffer/ but this
+   implementation is designed for multi-processing */
+struct Ring_Buffer_Details {
   /* size of ring buffer in bytes */
   size_t size;
   size_t head;
@@ -27,48 +38,65 @@ struct Ring_Buffer {
   _Atomic size_t refcount;
 };
 
-void detach_ring_buffer(struct Ring_Buffer* rb)
+void detach_ring_buffer(struct Ring_Buffer_Details* rb)
 {
   size_t val = --rb->refcount;
 
   if (val == 0) {
-    const size_t shmlen = sizeof(struct Ring_Buffer)+rb->size;
+    const int pagesize = getpagesize();
+    const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
 
-    munmap(rb, shmlen);
+    munmap(rb, rb_size+rb->size);
     printf("destroyed ring buffer\n");
   }
 }
 
-struct Ring_Buffer* create_ring_buffer(const char* identifier, size_t size)
+int create_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, size_t size)
 {
-  if (size % getpagesize() != 0) {
+  /* Memory layout
+
+     +-----------------------+----------------+
+     |         page 1        |   page 2..N    |
+     +-------------+---------+----------------+
+     | ring buffer |         |   ring buffer  |
+     |    struct   | padding |      data      |
+
+     Using virtual memory magic we make so that there are 2 blocks of
+     pages that point to same physical memory.
+   */
+
+  const int pagesize = getpagesize();
+  if (size % pagesize != 0) {
     fprintf(stderr, "create_ring_buffer: size must be a multiple of %d\n", getpagesize());
-    return NULL;
+    return -1;
   }
 
   int fd = shm_open(identifier, O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
   if (fd == -1) {
     fprintf(stderr, "create_ring_buffer: shm_open failed\n");
-    return NULL;
+    return -1;
   }
 
-  const size_t shmlen = sizeof(struct Ring_Buffer)+size;
+  /* align to page size */
+  const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
+
+  const size_t shmlen = rb_size+size;
   if (ftruncate(fd, shmlen) == -1) {
     fprintf(stderr, "create_ring_buffer: ftruncate failed\n");
-    return NULL;
+    return -1;
   }
 
-  struct Ring_Buffer* rb = mmap(NULL, shmlen+size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  struct Ring_Buffer_Details* rb = mmap(NULL, shmlen, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
   if (rb == MAP_FAILED) {
     fprintf(stderr, "create_ring_buffer: mmap failed\n");
-    return NULL;
+    return -1;
   }
+  uint8_t* buffer = (uint8_t*)rb + rb_size;
   // Map the buffer at that address
-  mmap(rb, shmlen, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, rb->fd, 0);
+  mmap(buffer, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
   // Now map it again, in the next virtual page
-  mmap(rb->shmem + size, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, rb->fd, 0);
+  mmap(buffer + size, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
 
-  rb->shmem = (uint8_t*)&rb[1];
   rb->size = size;
   rb->head = 0;
   rb->tail = 0;
@@ -78,40 +106,58 @@ struct Ring_Buffer* create_ring_buffer(const char* identifier, size_t size)
   if (pthread_mutex_init(&rb->mutex, NULL) != 0) {
     fprintf(stderr, "create_ring_buffer: pthread mutex init failed\n");
     detach_ring_buffer(rb);
-    return NULL;
+    return -1;
   }
 
-  return rb;
+  *ring_buffer = (struct Ring_Buffer) {
+    .buffer = buffer,
+    .impl = rb
+  };
+  return 0;
 }
 
-struct Ring_Buffer* get_ring_buffer(const char* identifier, size_t size)
+int get_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, size_t size)
 {
   int fd = shm_open(identifier, O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
   if (fd == -1) {
     fprintf(stderr, "create_ring_buffer: shm_open failed\n");
-    return NULL;
+    return -1;
   }
 
-  const size_t shmlen = sizeof(struct Ring_Buffer)+size;
-  struct Ring_Buffer* rb = mmap(NULL, shmlen, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  const int pagesize = getpagesize();
+  const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
+
+  struct Ring_Buffer_Details* rb = mmap(NULL, rb_size+size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
   if (rb == MAP_FAILED) {
     fprintf(stderr, "create_ring_buffer: mmap failed\n");
-    return NULL;
+    return -1;
   }
+  uint8_t* buffer = (uint8_t*)rb + rb_size;
+  // Map the buffer at that address
+  mmap(buffer, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
+  // Now map it again, in the next virtual page
+  mmap(buffer + size, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
 
   rb->refcount++;
 
   if (size != rb->size) {
     fprintf(stderr, "get_ring_buffer: invalid size passed (expected %lu, got %lu)\n", rb->size, size);
     detach_ring_buffer(rb);
-    return NULL;
+    return -1;
   }
+  *ring_buffer = (struct Ring_Buffer) {
+    .buffer = buffer,
+    .impl = rb
+  };
 
-  return rb;
+  return 0;
 }
 
-int write_to_ring_buffer(struct Ring_Buffer* rb, const void* data, size_t size)
+int write_to_ring_buffer(struct Ring_Buffer* ring_buffer, const void* data, size_t size)
 {
+  uint8_t* buffer = ring_buffer->buffer;
+  struct Ring_Buffer_Details* rb = ring_buffer->impl;
+
   if (size >= rb->size) {
     fprintf(stderr, "ring buffer is smaller than ring buffer size\n");
     return -1;
@@ -123,29 +169,32 @@ int write_to_ring_buffer(struct Ring_Buffer* rb, const void* data, size_t size)
     return 1;
   }
 
-  memcpy(&rb->shmem[rb->tail], data, size);
+  memcpy(&buffer[rb->tail], data, size);
   rb->tail += size;
 
   pthread_mutex_unlock(&rb->mutex);
+  printf("%lu %lu\n", rb->head, rb->tail);
   return 0;
 }
 
-void* read_from_ring_buffer(struct Ring_Buffer* rb, size_t* size)
+void* read_from_ring_buffer(struct Ring_Buffer* ring_buffer, size_t* size)
 {
+  uint8_t* buffer = ring_buffer->buffer;
+  struct Ring_Buffer_Details* rb = ring_buffer->impl;
+
   void* data = NULL;
   pthread_mutex_lock(&rb->mutex);
-  if (rb->head == rb->tail) {
-    *size = 0;
-  } else {
-    *size = rb->tail - rb->head;
-    data = &rb->shmem[rb->head];
-    rb->head = rb->tail;
 
-    if(rb->head > rb->size) {
-       rb->head -= rb->size;
-       rb->tail -= rb->size;
-    }
+  printf("%lu %lu\n", rb->head, rb->tail);
+  *size = rb->tail - rb->head;
+  data = &buffer[rb->head];
+  rb->head = rb->tail;
+
+  if(rb->head > rb->size) {
+    rb->head -= rb->size;
+    rb->tail -= rb->size;
   }
+
   pthread_mutex_unlock(&rb->mutex);
   return data;
 }

@@ -22,14 +22,18 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  struct Ring_Buffer* rb = create_ring_buffer(SHM_KEY, rb_size);
-  if (rb == NULL) {
+  struct Ring_Buffer buffer;
+  if (create_ring_buffer(&buffer, SHM_KEY, rb_size) != 0) {
     fprintf(stderr, "failed to create ring buffer...\n");
     return -2;
   }
+  printf("Ring buffer: fd=%d size=%lu refcount=%lu id=%s\n", buffer.impl->fd, buffer.impl->size, buffer.impl->refcount, buffer.impl->identifier);
+
+  const char* message = "Hello from writer process!";
+  write_to_ring_buffer(&buffer, message, strlen(message));
 
   sleep(5);
 
-  detach_ring_buffer(rb);
+  detach_ring_buffer(buffer.impl);
   return 0;
 }
