@@ -1,5 +1,5 @@
 CC ?=
-CFLAGS ?= -Wall -Wpedantic -Wextra -std=c11
+CFLAGS ?= -Wall -Wpedantic -Wextra -std=c11 -g
 
 .PHONY: all
 
