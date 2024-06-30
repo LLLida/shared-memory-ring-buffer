@@ -70,6 +70,7 @@ def plot_stats(stats, name):
         ax.plot(x, y2, label=f'p99 {key//1024}KB', color=colors[i])
         ax.scatter(x, y2, color='black')
         i += 1
+    ax.set_title(f'Respond time depending on frequency and size of ring buffer')
     ax.legend()
     ax.grid()
     ax.set_ylabel('respond duration, seconds')
