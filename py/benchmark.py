@@ -2,6 +2,7 @@ import subprocess
 import os
 import signal
 import time
+import matplotlib.pyplot as plt
 
 from plot_results import plot_results
 

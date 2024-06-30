@@ -39,6 +39,7 @@ struct Ring_Buffer_Details {
   pthread_mutex_t mutex;
   pthread_condattr_t cond_attr;
   pthread_cond_t cond;
+  _Atomic size_t version;
   _Atomic size_t refcount;
 };
 
@@ -109,6 +110,7 @@ int create_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, 
   rb->size = size;
   rb->head = 0;
   rb->tail = 0;
+  rb->version = 0;
   rb->refcount = 1;
   strncpy(rb->identifier, identifier, sizeof(rb->identifier)-1);
   rb->fd = fd;
@@ -182,17 +184,19 @@ int write_to_ring_buffer(struct Ring_Buffer* ring_buffer, const void* data, size
     return -1;
   }
 
-  pthread_mutex_lock(&rb->mutex);
-  if (rb->size - (rb->tail-rb->head) < size) {
-    pthread_mutex_unlock(&rb->mutex);
-    return 1;
-  }
+  /* pthread_mutex_lock(&rb->mutex); */
+  /* if (rb->size - (rb->tail-rb->head) < size) { */
+  /*   pthread_mutex_unlock(&rb->mutex); */
+  /*   return 1; */
+  /* } */
+  rb->version += 1;
 
   memcpy(&buffer[rb->tail], data, size);
   rb->tail += size;
 
-  pthread_cond_signal(&rb->cond);
-  pthread_mutex_unlock(&rb->mutex);
+  rb->version += 1;
+  /* pthread_cond_signal(&rb->cond); */
+  /* pthread_mutex_unlock(&rb->mutex); */
   return 0;
 }
 
@@ -203,9 +207,13 @@ void* read_from_ring_buffer(struct Ring_Buffer* ring_buffer, size_t* size)
   struct Ring_Buffer_Details* rb = ring_buffer->impl;
 
   void* data = NULL;
-  pthread_mutex_lock(&rb->mutex);
-  while(rb->head == rb->tail) {
-    pthread_cond_wait(&rb->cond, &rb->mutex);
+  /* pthread_mutex_lock(&rb->mutex); */
+  /* while(rb->head == rb->tail) { */
+  /*   pthread_cond_wait(&rb->cond, &rb->mutex); */
+  /* } */
+  size_t value = rb->version;
+  while (value & 1) {
+    value = rb->version;
   }
 
   *size = rb->tail - rb->head;
@@ -217,7 +225,7 @@ void* read_from_ring_buffer(struct Ring_Buffer* ring_buffer, size_t* size)
     rb->tail -= rb->size;
   }
 
-  pthread_mutex_unlock(&rb->mutex);
+  /* pthread_mutex_unlock(&rb->mutex); */
   return data;
 }
 
