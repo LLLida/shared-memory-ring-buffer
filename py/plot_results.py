@@ -23,9 +23,9 @@ def plot_results(filepath, imagepath, title='Performance'):
 
     diff = np.clip(retrieve-send, 0, 1)
     mu = np.mean(diff)
-    std = np.std(diff)
+    p99 = np.percentile(diff, 99)
 
-    ax.set_title(title+f'\nduration={mu*1000000:.2f}+-{std*1000000:.2f} microsec')
+    ax.set_title(title+f'\n mean dur={mu*1000000:.2f}msc, p99={p99*1000000:.2f}msc')
     ax.plot(send, retrieve-send)
     ax.grid()
     ax.set_xlabel('time, sec')
@@ -36,7 +36,7 @@ def plot_results(filepath, imagepath, title='Performance'):
     print(f'saved plot to {imagepath}...')
     plt.close()
 
-    return mu, std
+    return mu, p99
 
 if __name__ == '__main__':
     import argparse

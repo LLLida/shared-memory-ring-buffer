@@ -29,16 +29,16 @@ stats = []
 def run_benchmarks(buff_sizes, freqs):
     for buff_size in buff_sizes:
         for freq in freqs:
-            mu, _ = run_benchmark(buff_size, freq, 'temp.csv')
-            print(f'\t{mu=}')
-            stats.append((buff_size, freq, mu))
+            mu, p99 = run_benchmark(buff_size, freq, 'temp.csv')
+            print(f'\t{mu=} {p99=}')
+            stats.append((buff_size, freq, mu, p99))
 
-# buff_sizes = [4096, 4*4096, 8*4096]
-# freqs = [10, 50, 100, 200, 500, 750, 1000]
-# run_benchmarks(buff_sizes, freqs)
+buff_sizes = [4096, 4*4096, 8*4096]
+freqs = [25, 50, 100, 200, 500, 750, 1000]
+run_benchmarks(buff_sizes, freqs)
 
 buff_sizes = [256*1024, 1024*1024, 8*1024*1024, 32*1024*1024]
-freqs = [100, 200, 350, 500, 750, 1000, 1500]
+freqs = [200, 500, 750, 1000, 1500, 2000]
 run_benchmarks(buff_sizes, freqs)
 
 print(stats)
