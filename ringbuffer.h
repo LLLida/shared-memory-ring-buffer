@@ -90,22 +90,21 @@ int create_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, 
   /* align to page size */
   const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
 
-  const size_t shmlen = rb_size+size;
-  if (ftruncate(fd, shmlen) == -1) {
+  if (ftruncate(fd, rb_size+size) == -1) {
     fprintf(stderr, "create_ring_buffer: ftruncate failed\n");
     return -1;
   }
 
-  struct Ring_Buffer_Details* rb = mmap(NULL, shmlen, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  struct Ring_Buffer_Details* rb = mmap(NULL, rb_size+2*size, PROT_NONE, MAP_SHARED|MAP_ANONYMOUS, fd, 0);
   if (rb == MAP_FAILED) {
     fprintf(stderr, "create_ring_buffer: mmap failed\n");
     return -1;
   }
   uint8_t* buffer = (uint8_t*)rb + rb_size;
   // Map the buffer at that address
-  mmap(buffer, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
+  mmap(rb, rb_size+size, PROT_READ | PROT_WRITE, MAP_SHARED|MAP_FIXED, fd, 0);
   // Now map it again, in the next virtual page
-  mmap(buffer + size, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
+  mmap(buffer + size, size, PROT_READ | PROT_WRITE, MAP_SHARED|MAP_FIXED, fd, rb_size);
 
   rb->size = size;
   rb->head = 0;
@@ -146,16 +145,16 @@ int get_ring_buffer(struct Ring_Buffer* ring_buffer, const char* identifier, siz
   const int pagesize = getpagesize();
   const size_t rb_size = (sizeof(struct Ring_Buffer_Details)+pagesize-1)/pagesize*pagesize;
 
-  struct Ring_Buffer_Details* rb = mmap(NULL, rb_size+size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+  struct Ring_Buffer_Details* rb = mmap(NULL, rb_size+2*size, PROT_NONE, MAP_SHARED|MAP_ANONYMOUS, fd, 0);
   if (rb == MAP_FAILED) {
     fprintf(stderr, "create_ring_buffer: mmap failed\n");
     return -1;
   }
   uint8_t* buffer = (uint8_t*)rb + rb_size;
   // Map the buffer at that address
-  mmap(buffer, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
+  mmap(rb, rb_size+size, PROT_READ | PROT_WRITE, MAP_SHARED|MAP_FIXED, fd, 0);
   // Now map it again, in the next virtual page
-  mmap(buffer + size, size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, rb_size);
+  mmap(buffer + size, size, PROT_READ | PROT_WRITE, MAP_SHARED|MAP_FIXED, fd, rb_size);
 
   rb->refcount++;
 
