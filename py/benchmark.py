@@ -70,5 +70,3 @@ plot_stats(run_benchmarks(buff_sizes, freqs), 'img/stats_small.png')
 buff_sizes = [256*1024, 1024*1024, 8*1024*1024, 32*1024*1024]
 freqs = [200, 500, 750, 1000, 1500, 2000]
 plot_stats(run_benchmarks(buff_sizes, freqs), 'img/stats_big.png')
-
-print(stats)
